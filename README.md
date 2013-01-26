@@ -37,7 +37,6 @@ Tested browsers:
 * Firefox (18+)
 * Safari (6+)
 * IE (9+)
-* iOS S
 
 
 *Warning* jleader is not threads afe as localStorage is not thread safe among different tabs. However everything works just fine. There is a [mutex implementation](http://balpha.de/2012/03/javascript-concurrency-and-locking-the-html5-localstorage/) and it will be added if someone encounters problems with thread safeness.
