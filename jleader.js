@@ -17,10 +17,13 @@
         peersKey = '_jleaderPeers',
         masterKey = '_jleaderMaster',
         heartbeatKey = '_jleaderHeartbeat',
-        id = new Date().getTime() + ':' + (Math.random() * 1000000000 | 0), subscribed = [];
+        subscribed = [],
+        id = new Date().getTime() + ':' + (Math.random() * 1000000000 | 0);
+
+    jleader.id = id;
 
     function _fireSubscriptions(value) {
-        jleader.log('Firing subscribers. Master', value);
+        log('Firing subscribers. Master', value);
         for (var i = subscribed.length - 1; i >=0; i--) {
             subscribed[i](value);
         }
@@ -28,18 +31,18 @@
 
     jleader.isMaster = false;
     jleader.announce = function() {
-        jleader.log('Announcing peer', id);
+        log('Announcing peer', id);
         var peers = storage.get(peersKey, {});
         peers[id] = new Date().getTime();
         storage.set(peersKey, peers);
-        jleader.log('Peers', peers);
+        log('Peers', peers);
 
         $(window).on('unload', function() {
-            jleader.log('Unload peer', id);
+            log('Unload peer', id);
             var peers = storage.get(peersKey);
             delete peers[id];
             storage.set(peersKey, peers);
-            jleader.log('Unload master', jleader.isMaster);
+            log('Unload master', jleader.isMaster);
             if (jleader.isMaster) {
                 storage.deleteKey(masterKey);
             }
@@ -65,7 +68,7 @@
 
         jleader.heartbeat();
 
-        jleader.log('Master', storage.get(masterKey));
+        log('Master', storage.get(masterKey));
 
         return jleader;
     };
@@ -85,7 +88,7 @@
         }
         if (newMaster == id) {
             //we're next in queue. Electing as master
-            jleader.log('We are elected as master', id);
+            log('We are elected as master', id);
             jleader.electMe();
 
             //removing master peer from queue
@@ -106,9 +109,9 @@
             pollPeriod = 10000,
             heartbeatValue = storage.get(heartbeatKey, 0),
             peers = storage.get(peersKey, {});
-        jleader.log('Heartbeat value', heartbeatValue);
+        log('Heartbeat value', heartbeatValue);
         if ((heartbeatValue + 5000) < current) {
-            jleader.log('Heartbeat is out of date. Electing new master');
+            log('Heartbeat is out of date. Electing new master');
             jleader.elect();
         }
         if (jleader.isMaster) {
@@ -119,7 +122,7 @@
                 if (peers[peerName] + 15000 > current) {
                     cleanedPeers[peerName] = peers[peerName];
                 } else {
-                    jleader.log('Peer', peerName, 'is out-of-date');
+                    log('Peer', peerName, 'is out-of-date');
                 }
             }
 
@@ -128,7 +131,7 @@
         } else {
             //update own heartbeat
             peers[id] = current;
-            jleader.log('Updating peer heartbeat', current);
+            log('Updating peer heartbeat', current);
             storage.set(peersKey, peers);
         }
 
@@ -146,9 +149,9 @@
     }
 
     jleader.debug = false;
-    jleader.log = function() {
+    function log() {
         if (jleader.debug && console !== undefined) {
-            console.log.apply(console, arguments);
+            console.log.apply(console, [new Date()].concat(Array.prototype.slice.call(arguments)));
         }
     }
 });
