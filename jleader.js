@@ -2,23 +2,51 @@
 (function(factory){
     if (typeof define === 'function' && define['amd']) {
         // [2] AMD anonymous module
-        define(['jquery', 'exports', 'jstorage'], factory);
+        define(['exports'], factory);
     } else {
         // [3] No module loader (plain <script> tag) - put directly in global namespace
-        factory(window.jQuery);
+        factory(window.jleader = {});
     }
-})(function($, jleader, undefined) {
-    //TODO support localStorage directly
-    if (!$.jStorage) {
-        throw new Error("jStorage is not loaded");
-    }
-
-    var storage = $.jStorage,
+})(function(jleader, undefined) {
+    
+    var storage,
         peersKey = '_jleaderPeers',
         masterKey = '_jleaderMaster',
         heartbeatKey = '_jleaderHeartbeat',
         subscribed = [],
         id = new Date().getTime() + ':' + (Math.random() * 1000000000 | 0);
+
+    if ((storage = window.localStorage) === undefined) {
+        throw new Error("localStorage is not found");
+    }
+    if (!JSON) {
+        throw new Error("JSON support not found");
+    }
+
+    //utility functions
+    function on(type, listener) {
+        if (window.addEventListener) {
+            window.addEventListener(type, listener);
+        } else { //IE8
+            window.attachEvent('on' + type, listener);
+        }
+    }
+    
+    function getItem(key, defaultValue) {
+        var val = storage[key];
+        if (val) {
+            return val[0] === '[' || val[0] === '{' ? JSON.parse(val) : val;
+        } else {
+            return defaultValue;
+        }
+    }
+    
+    function setItem(key, value) {
+        if (typeof value === 'object') {
+            value = JSON.stringify(value);
+        }
+        storage[key] = value; 
+    }
 
     jleader.id = id;
 
@@ -32,51 +60,54 @@
     jleader.isMaster = false;
     jleader.announce = function() {
         log('Announcing peer', id);
-        var peers = storage.get(peersKey, {});
+        var peers = getItem(peersKey, {});
         peers[id] = new Date().getTime();
-        storage.set(peersKey, peers);
+        setItem(peersKey, peers);
         log('Peers', peers);
 
-        $(window).on('unload', function() {
+        function onUnload() {
             log('Unload peer', id);
-            var peers = storage.get(peersKey);
+            var peers = getItem(peersKey, {});
             delete peers[id];
-            storage.set(peersKey, peers);
+            setItem(peersKey, peers);
             log('Unload master', jleader.isMaster);
             if (jleader.isMaster) {
-                storage.deleteKey(masterKey);
+                storage.removeItem(masterKey);
             }
-        });
-
-        if (storage.get(masterKey) === null) {
+        }
+        on('unload', onUnload);
+        
+        if (!storage[masterKey]) {
             jleader.elect();
         }
-        storage.listenKeyChange(masterKey, function(key, action) {
-            var oldValue = jleader.isMaster;
-            if (action === 'updated' && storage.get(key) !== id) {
-                jleader.isMaster = false;
+        
+        on('storage', function(e) {
+            if (!e) { e = window.event;}
+            if (e.key !== masterKey) {
+                return;
             }
-            if (action == 'deleted' || action == 'flushed') {
+
+            if (e.newValue !== null && storage[masterKey] !== id) {
+                jleader.isMaster = false;
+            } else if (e.newValue === null) { //master was unloaded
                 jleader.elect();
             }
 
-            //notify about changes
-            if (oldValue != jleader.isMaster) {
-                _fireSubscriptions(jleader.isMaster);
-            }
+            _fireSubscriptions(jleader.isMaster);
         });
-
+        
         jleader.heartbeat();
 
-        log('Master', storage.get(masterKey));
+        log('Master', storage[masterKey]);
 
         return jleader;
     };
 
     jleader.elect = function() {
         //check who's next
-        var peers = storage.get(peersKey, {}),
+        var peers = getItem(peersKey, {}),
             now = new Date().getTime(), newMaster;
+        log('Candidate peers', peers);
         for (var peerName in peers) {
             //check for dead peers
             if (peers[peerName] + 15000 < now) {
@@ -93,12 +124,12 @@
 
             //removing master peer from queue
             delete peers[newMaster];
-            storage.set(peersKey, peers);
+            setItem(peersKey, peers);
         }
     };
 
     jleader.electMe = function() {
-        storage.set(masterKey, id);
+        storage[masterKey] = id;
         jleader.isMaster = true;
         //force subscriptions update
         _fireSubscriptions(true);
@@ -107,15 +138,15 @@
     jleader.heartbeat = function() {
         var current = new Date().getTime(),
             pollPeriod = 10000,
-            heartbeatValue = storage.get(heartbeatKey, 0),
-            peers = storage.get(peersKey, {});
+            heartbeatValue = storage[heartbeatKey] || 0,
+            peers = getItem(peersKey, {});
         log('Heartbeat value', heartbeatValue);
         if ((heartbeatValue + 5000) < current) {
             log('Heartbeat is out of date. Electing new master');
             jleader.elect();
         }
         if (jleader.isMaster) {
-            storage.set(heartbeatKey, current);
+            storage[heartbeatKey] = current;
             //walk through all peers and kill old
             var cleanedPeers = {};
             for (var peerName in peers) {
@@ -126,19 +157,19 @@
                 }
             }
 
-            storage.set(peersKey, cleanedPeers);
+            setItem(peersKey, cleanedPeers);
             pollPeriod = 1500;
         } else {
             //update own heartbeat
             peers[id] = current;
             log('Updating peer heartbeat', current);
-            storage.set(peersKey, peers);
+            setItem(peersKey, peers);
         }
 
         setTimeout(function(){
             jleader.heartbeat();
-        }, pollPeriod)
-    }
+        }, pollPeriod);
+    };
 
     /**
      * Subscribe to master change
@@ -146,7 +177,7 @@
      */
     jleader.subscribe = function(callback) {
         subscribed.push(callback);
-    }
+    };
 
     jleader.debug = false;
     function log() {
