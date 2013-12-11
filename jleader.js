@@ -141,7 +141,7 @@
             heartbeatValue = storage[heartbeatKey] || 0,
             peers = getItem(peersKey, {});
         log('Heartbeat value', heartbeatValue);
-        if ((heartbeatValue + 5000) < current) {
+        if ((parseInt(heartbeatValue) + 5000) < current) {
             log('Heartbeat is out of date. Electing new master');
             jleader.elect();
         }
