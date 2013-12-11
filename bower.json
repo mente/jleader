@@ -1,0 +1,6 @@
+{
+  "name": "jleader",
+  "version": "1.0.2",
+  "main": ["./jleader.js"],
+  "author": "Alex Vasilenko <aa.vasilenko@gmail.com>"
+}
